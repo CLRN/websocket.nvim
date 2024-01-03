@@ -148,14 +148,15 @@ function Websocket:connect()
             end
           end
 
-          if data and self.frame_count > 0 then
-            local frame = self:process_frame(data)
+          while data ~= nil and data ~= "" and self.frame_count > 0 do
+            local frame, remaining = self:process_frame(data)
 
             if frame then
               for _, fn in ipairs(self.on_message) do
                 fn(frame)
               end
             end
+            data = remaining
           end
 
           self.frame_count = self.frame_count + 1
@@ -239,7 +240,7 @@ function Websocket:remove_on_close(index)
 end
 
 ---@param data string
----@return false | WebsocketFrame # false if not finished, frame is finished
+---@return false | WebsocketFrame, string # false if not finished, frame is finished
 function Websocket:process_frame(data)
   local index = 1
   local fin = bit.band(data:byte(index), 0x80) == 0x80
@@ -281,13 +282,16 @@ function Websocket:process_frame(data)
   end
 
   local data_old = "" .. data
-  data = data:sub(index)
+  data = data:sub(index, index + payload_length - 1)
+  local remaining = data:sub(payload_length + 1)
 
-  if data:len() ~= payload_length then
+  -- print(string.format("index: %d, len: %d, \ndata: %s, \nold: %s, \nleft: %s\n\n", index, payload_length, data, data_old, data:sub(payload_length + 1)))
+
+  if data:len() < payload_length then
     print("Error: payload length does not match data length")
     print(data:len() .. " ~= " .. payload_length)
     print(data_old)
-    return false
+    return false, remaining
   end
 
   if fin then
@@ -299,16 +303,9 @@ function Websocket:process_frame(data)
     })
     self.previous = ""
 
-    if frame:to_string() ~= data_old then
-      print("Error: frame does not match data")
-      print_bases.print_hex(data_old)
-      print_bases.print_hex(frame:to_string())
-      return false
-    end
-
     if frame.opcode == Opcode.CLOSE then
       self:close()
-      return false
+      return false, remaining
     end
 
     if frame.opcode == Opcode.PING then
@@ -324,16 +321,16 @@ function Websocket:process_frame(data)
           return
         end
       end)
-      return false
+      return false, remaining
     end
 
-    return frame
+    return frame, data:sub(payload_length + 1)
   end
 
   if opcode == Opcode.CONTINUATION then
     self.previous = self.previous .. data
   end
-  return false
+  return false, remaining
 end
 
 function Websocket:send_frame(frame)

@@ -156,6 +156,7 @@ function Websocket:connect()
                 fn(frame)
               end
             end
+
             data = remaining
           end
 
@@ -283,9 +284,9 @@ function Websocket:process_frame(data)
 
   local data_old = "" .. data
   data = data:sub(index, index + payload_length - 1)
-  local remaining = data:sub(payload_length + 1)
+  local remaining = data_old:sub(payload_length + index)
 
-  -- print(string.format("index: %d, len: %d, \ndata: %s, \nold: %s, \nleft: %s\n\n", index, payload_length, data, data_old, data:sub(payload_length + 1)))
+  -- print(string.format("index: %d, len: %d, \ndata: %s, \nold: %s, \nleft: %s\n\n", index, payload_length, data, data_old, remaining))
 
   if data:len() < payload_length then
     print("Error: payload length does not match data length")
@@ -324,7 +325,7 @@ function Websocket:process_frame(data)
       return false, remaining
     end
 
-    return frame, data:sub(payload_length + 1)
+    return frame, remaining
   end
 
   if opcode == Opcode.CONTINUATION then
